@@ -2,11 +2,32 @@ var express = require('express');
 var app = express();
 var Trello = require("node-trello");
 var t = new Trello("e7b78f08bba6e897951d2cecf7fa8ab2", "f0abcacb026aae2e87623f7fd660745e2527cf4fd6e983f65570ae98b9e4b2e7");
-
+var now = new Date();
+var h24 = 86400000;
 // user log
 var users = {
-	//saif: {balance: -250, open: false, resolved: false}
+	//saif: {balance: -250, open: false, resolved: false, updatedDate: new Date(now - (3 * h24))}
 };
+
+var delinquentUsers =[];
+
+var calcDateDiff = function(oldDate, newDate) {
+ return (newDate.getDate() - oldDate.getDate());
+}
+
+var updateLateFees = function() {
+  console.log("in updateLateFees");
+  //console.log("delinquentUsers: ", delinquentUsers);
+  for(var i = 0;i < delinquentUsers.length; i++) {
+    var index = delinquentUsers[i];
+    var dateDiff = calcDateDiff(users[index].updatedDate, now);
+    if (dateDiff > 0) {
+      //console.log(dateDiff);
+      users[index].balance -= (5 * dateDiff);
+      users[index].updatedDate = now;
+    };
+  }
+}
 
 // Updates the user balance after each transaction
 var transactionUpdate= function(user_id, item_type, amount) {
@@ -35,8 +56,14 @@ var balanceAction = function(user_id, balance, cb) {
         users[user_id].open = true;
         cb(err, data);
       });
+      delinquentUsers.push(user_id);
+      //users[user_id]['updatedDate'] = now;
     }
-    else if (!users[user_id].open) createOpenCard(user_id, "5564975dcbcbfa7aa6d7f1d0", null, null, cb);
+    else if (!users[user_id].open) {
+      createOpenCard(user_id, "5564975dcbcbfa7aa6d7f1d0", null, null, cb);
+      delinquentUsers.push(user_id);
+      //users[user_id]['updatedDate'] = now;
+    }
     
     else {
       cb(undefined, {message: "Card exists in open list"});
@@ -51,6 +78,8 @@ var balanceAction = function(user_id, balance, cb) {
         users[user_id].resolved = true;
         cb(err, data);
       });
+      //users[user_id].updatedDate = now;
+      delinquentUsers.splice(delinquentUsers.indexOf(user_id), 1);
     }
     else cb(undefined, {message: "balance is above threshold"});
   }
@@ -85,10 +114,10 @@ var userUpdate = function(user_id, amount) {
   users[user_id] = {
     balance: (amount >= 0) ? amount : amount * -1,
     open: false,
-    resolved: false
+    resolved: false,
+    updatedDate: now
   };
-
-  
+  updateLateFees();
   //users[user_id][''] = (bal <= -200) ? true; 
 }
 
@@ -100,17 +129,23 @@ app.post('/users/:user_id/items', function(req, res) {
   var amount = parseInt(req.query.amount);
 	if (user) {
     console.log("User found!");
+    updateLateFees();
     var currentBal = transactionUpdate(req.params.user_id, item_type, amount);
     balanceAction(req.params.user_id, currentBal, function(err, data) {
       
       if(err)  res.send(err);
-      else res.send(data);
+      else {
+        res.send(data);
+        //console.log(users);
+      }
     });
+
 	}
 	else {
-    userUpdate(user_id,amount);
+    userUpdate(req.params.user_id,amount);
     res.send("No user by id: " + req.params.user_id + " exists");
   }
+  //console.log(users);
 });
 
 
