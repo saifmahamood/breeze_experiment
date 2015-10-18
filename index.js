@@ -143,7 +143,7 @@ app.post('/users/:user_id/items', function(req, res) {
 	}
 	else {
     userUpdate(req.params.user_id,amount);
-    res.send("No user by id: " + req.params.user_id + " exists");
+    res.send(req.params.user_id + " created");
   }
   //console.log(users);
 });
